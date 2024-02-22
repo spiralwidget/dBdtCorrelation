@@ -163,7 +163,7 @@ def loadChaosModel(start_date,end_date,latitude,longitude_deg,radius=6371):
     CHAOS7 = df.reindex(pd.date_range(start_date_string,end_date_string,freq='1min')).interpolate()
     return(CHAOS7)
 
-def manipulate_obs_data(obs_data,CHAOSmodel):
+def manipulate_obs_data(obs_data,CHAOSmodel, option =0):
     '''Inputs: obs_data, a dataframe showing the data from an observatory as downloaded using the 
     utils.fetch_ground_obs(observatory, start, end) function; CHAOSmodel, a dataframe of the
     magnetic field model in the observatory location downloaded using utils.loadChaosModel'''
@@ -171,6 +171,11 @@ def manipulate_obs_data(obs_data,CHAOSmodel):
     ###Takes the observatory data for a given station and removes estimated magnetic field. The function
     ###then subtracts the mean to get deviations around zero, before deriving a dB/dt timeseries. The
     ###uncorrected magnetic field, B_NEC, is then removed.
+    ###Option: the option parameter allows you to choose the dBdt calculation style. Option 0 is default
+    ###where diff (BH) is used for the calculation; this was used in Madsen et al. 2022/23. The second 
+    ###option, option 1 uses sqrt(diff(BY) + diff (BX)) which allows for calculation of dBdt even
+    ###at times where overall field strength is not changing but the vector direction is changing. The
+    ###third option allows for download of both parameters as dBdt and dBdt1 respectively.
     
     CHAOStime=CHAOSmodel.loc[obs_data.Timestamp,:]
     
@@ -188,8 +193,17 @@ def manipulate_obs_data(obs_data,CHAOSmodel):
     obs_data = obs_data.assign(B_H=obs_data.B_H-obs_data.B_H.mean())
     
     ###Get dB/dt
-    obs_data = obs_data.assign(dBdt=obs_data.B_H.diff('Timestamp'))
-    
+    if option == 0:
+        ###This means diff(BH) will be used.
+        obs_data = obs_data.assign(dBdt=obs_data.B_H.diff('Timestamp')) ##OLD METHOD.
+    elif option == 1:
+        ###New Method.
+        obs_data['dBdt1'] = (((obs_data['B_N'].diff('Timestamp') ** 2) + (obs_data['B_E'].diff('Timestamp') ** 2)) ** 0.5)
+    elif option == 2:
+        obs_data = obs_data.assign(dBdt=obs_data.B_H.diff('Timestamp')) 
+        obs_data['dBdt1'] = (((obs_data['B_N'].diff('Timestamp') ** 2) + (obs_data['B_E'].diff('Timestamp') ** 2)) ** 0.5)
+    else:
+        print('ERROR! Please choose valid option between 0 and 2. refer to utility file. details in function header.')
     ###Remove uncorrected data
     obs_data = obs_data.drop(['B_NEC','NEC'])
     return(obs_data)
